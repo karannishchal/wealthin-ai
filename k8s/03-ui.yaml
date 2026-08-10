@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wealthin-ui
+  namespace: wealthin
+  labels: { app: wealthin-ui }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: wealthin-ui }
+  template:
+    metadata:
+      labels: { app: wealthin-ui }
+    spec:
+      containers:
+        - name: ui
+          # Build with Dockerfile.ui and push, then set this image.
+          image: ghcr.io/<owner>/wealthin-ai-ui:latest
+          ports:
+            - containerPort: 8501
+          env:
+            - name: API_URL
+              value: "http://wealthin-api:8000"
+          resources:
+            requests: { cpu: "100m", memory: "256Mi" }
+            limits: { cpu: "500m", memory: "512Mi" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wealthin-ui
+  namespace: wealthin
+spec:
+  type: NodePort
+  selector: { app: wealthin-ui }
+  ports:
+    - port: 8501
+      targetPort: 8501

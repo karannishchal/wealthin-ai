@@ -1,0 +1,6 @@
+{"query": "What is Apple's recent 3-month price performance and P/E?", "expected_tools": ["get_market_data"]}
+{"query": "Compare Nvidia and AMD over the last 6 months.", "expected_tools": ["get_market_data"]}
+{"query": "Analyse this portfolio: 60% AAPL, 30% MSFT, 10% VOO by value.", "expected_tools": ["analyse_portfolio"]}
+{"query": "Any recent news about the semiconductor sector?", "expected_tools": ["search_news"]}
+{"query": "If a fund grew from 1200 to 1560, what is the percentage return?", "expected_tools": ["calculate"]}
+{"query": "What does the indexed fund fact sheet say about fees?", "expected_tools": ["search_documents"]}

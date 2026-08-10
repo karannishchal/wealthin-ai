@@ -1,0 +1,14 @@
+.git
+.venv
+venv
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+tests
+eval
+docs
+k8s
+.env
+*.md
+!data/docs/*.md
