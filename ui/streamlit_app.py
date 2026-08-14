@@ -32,6 +32,11 @@ INPROCESS = os.environ.get("INPROCESS", "0") == "1"
 st.set_page_config(page_title="WealthIn.AI", page_icon="📈", layout="centered")
 
 
+def _safe_md(text: str) -> str:
+    """Escape '$' so amounts like $10,000 don't render as LaTeX math."""
+    return (text or "").replace("$", "\\$")
+
+
 # --------------------------------------------------------------------------- #
 #  Answer source: in-process agent or remote FastAPI backend
 # --------------------------------------------------------------------------- #
@@ -173,7 +178,7 @@ with st.sidebar:
 for m in st.session_state.messages:
     avatar = "🧑" if m["role"] == "user" else "📈"
     with st.chat_message(m["role"], avatar=avatar):
-        st.markdown(m["content"])
+        st.markdown(_safe_md(m["content"]) if m["role"] == "assistant" else m["content"])
 
 typed = st.chat_input("Ask an investment-research question…")
 prompt = typed or st.session_state.pending
@@ -188,7 +193,7 @@ if prompt:
         with st.spinner("Researching…"):
             resp = get_answer(prompt, st.session_state.messages[:-1][-8:])
 
-        st.markdown(resp.get("answer", ""))
+        st.markdown(_safe_md(resp.get("answer", "")))
         trace = resp.get("trace") or []
         provs = [s.get("provider") for s in trace if s.get("kind") == "llm" and s.get("provider")]
         if provs:
