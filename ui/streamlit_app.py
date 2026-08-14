@@ -35,18 +35,34 @@ st.set_page_config(page_title="WealthIn.AI", page_icon="📈", layout="centered"
 # --------------------------------------------------------------------------- #
 #  Answer source: in-process agent or remote FastAPI backend
 # --------------------------------------------------------------------------- #
+PROVIDER_LABELS = {
+    "groq": "Groq",
+    "gemini": "Google Gemini",
+    "anthropic": "Anthropic Claude",
+    "openai": "OpenAI",
+}
+
+
+def provider_label(name: str) -> str:
+    return PROVIDER_LABELS.get((name or "").lower(), (name or "AI").title())
+
+
 def get_status() -> tuple[str, str]:
-    """Return (badge_text, css_class)."""
+    """Return (badge_text, css_class). Shows the provider that last answered,
+    falling back to the configured primary provider."""
+    used = st.session_state.get("last_provider")
     if INPROCESS:
         from app.config import settings
 
         if settings.has_any_key():
-            return "🟢 Backend Online · Provider: Google Gemini", "wi-badge"
+            label = provider_label(used or settings.llm_provider)
+            return f"🟢 Backend Online · Provider: {label}", "wi-badge"
         return "🟠 Demo mode · no LLM key set", "wi-badge wi-badge-off"
     try:
         h = requests.get(f"{API_URL}/health", timeout=5).json()
         if h.get("has_key"):
-            return "🟢 Backend Online · Provider: Google Gemini", "wi-badge"
+            label = provider_label(used or h.get("provider") or "gemini")
+            return f"🟢 Backend Online · Provider: {label}", "wi-badge"
         return "🟠 Demo mode · no LLM key set", "wi-badge wi-badge-off"
     except Exception:  # noqa: BLE001
         return "🔴 Backend not reachable", "wi-badge wi-badge-off"
@@ -62,8 +78,19 @@ def get_answer(prompt: str, history: list[dict]) -> dict:
             return demo_answer(prompt)
         from app.agent import run_agent
 
-        result = run_agent(prompt, history=history)
-        return {"answer": result.get("answer", ""), "trace": result.get("trace", [])}
+        try:
+            result = run_agent(prompt, history=history)
+            return {"answer": result.get("answer", ""), "trace": result.get("trace", [])}
+        except Exception as exc:  # noqa: BLE001 - never crash the UI; surface the reason
+            return {
+                "answer": (
+                    "⚠️ The AI provider couldn't be reached, so I can't answer live right now.\n\n"
+                    f"**Reason:** `{exc}`\n\n"
+                    "This is usually an API-key or quota issue on the host. "
+                    "_(Educational demo — not financial advice.)_"
+                ),
+                "trace": [{"kind": "error", "detail": str(exc)}],
+            }
     try:
         return requests.post(
             f"{API_URL}/chat",
@@ -163,6 +190,9 @@ if prompt:
 
         st.markdown(resp.get("answer", ""))
         trace = resp.get("trace") or []
+        provs = [s.get("provider") for s in trace if s.get("kind") == "llm" and s.get("provider")]
+        if provs:
+            st.session_state.last_provider = provs[-1]
         tools_used = [s.get("name") for s in trace if s.get("kind") == "tool"]
         if tools_used:
             chips = "".join(f'<span class="wi-chip">{t}</span>' for t in tools_used)

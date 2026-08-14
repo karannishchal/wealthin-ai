@@ -26,8 +26,8 @@ class Settings(BaseSettings):
     # behaviour
     demo_mode: bool = True
     rate_limit_per_minute: int = 15
-    max_agent_steps: int = 6
-    scope_guard: bool = True  # politely redirect clearly off-topic questions
+    max_agent_steps: int = 4
+    scope_guard: bool = False  # scope enforced in the system prompt (saves an LLM call)
     docs_dir: str = "./data/docs"
     log_level: str = "INFO"
 

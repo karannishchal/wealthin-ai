@@ -8,6 +8,10 @@ it *plans, calls tools, reasons, and answers with citations.*
 
 `Python` · `LangGraph` · `FastAPI` · `RAG (FAISS)` · `Streamlit` · `Docker` · `GitHub Actions` · `Kubernetes`
 
+### ▶ [Try the live demo → wealthin-ai.streamlit.app](https://wealthin-ai.streamlit.app/)
+
+_Educational demo on public data — not financial advice._
+
 </div>
 
 ---
