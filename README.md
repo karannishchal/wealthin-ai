@@ -27,6 +27,10 @@ It was built to demonstrate an end-to-end, production-minded GenAI system: agent
 orchestration, retrieval, guardrails, evaluation, observability, containerisation, CI/CD
 and Kubernetes.
 
+### ▶ [Try the live demo → wealthin-ai.streamlit.app](https://wealthin-ai.streamlit.app/)
+
+_Educational demo on public data — not financial advice._
+
 ## What it can do
 
 The agent chooses from five tools:
