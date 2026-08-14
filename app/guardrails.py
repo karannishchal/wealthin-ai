@@ -50,6 +50,45 @@ def check_input(text: str) -> GuardResult:
     return GuardResult(True, flagged_advice=bool(_ADVICE.search(text)))
 
 
+OFF_TOPIC_MESSAGE = (
+    "I'm a focused **investment-research assistant**, so I stick to markets, companies, "
+    "funds, economics, and personal-finance topics. Ask me things like *“What's a P/E "
+    "ratio?”*, *“How did Nvidia perform this quarter?”*, or *“Analyse a 60/30/10 "
+    "portfolio.”*"
+)
+
+_SCOPE_SYSTEM = (
+    "You are a topic classifier for an investment-research assistant. Decide whether "
+    "the user's message relates to investing, markets, stocks, companies, funds/ETFs, "
+    "economics, personal finance, or any financial concept — including general or "
+    "educational finance questions (e.g. 'what is a P/E ratio', 'how does inflation "
+    "affect stocks'). Treat borderline or conceptual finance questions as RELEVANT. "
+    "Only classify clearly-unrelated requests (coding help, recipes, general trivia, "
+    "creative writing, personal chit-chat) as UNRELATED. "
+    "Reply with exactly one word: RELEVANT or UNRELATED."
+)
+
+
+def is_in_scope(text: str) -> bool:
+    """Lightweight model-judged scope check. Fails open (allows) on any error.
+
+    Generous by design: only clearly off-topic requests are rejected, so
+    conceptual finance questions are never wrongly blocked.
+    """
+    from app.llm import chat  # local import avoids a circular import at module load
+
+    try:
+        resp = chat(
+            [
+                {"role": "system", "content": _SCOPE_SYSTEM},
+                {"role": "user", "content": (text or "")[:MAX_INPUT_CHARS]},
+            ]
+        )
+        return "UNRELATED" not in resp.content.strip().upper()
+    except Exception:  # noqa: BLE001 - never block on classifier failure
+        return True
+
+
 def apply_output_guardrails(answer: str, flagged_advice: bool = False) -> str:
     """Ensure a disclaimer is present and soften direct-advice phrasing."""
     answer = (answer or "").strip()

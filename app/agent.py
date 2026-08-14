@@ -13,7 +13,12 @@ from typing import Any, TypedDict
 from langgraph.graph import END, START, StateGraph
 
 from app.config import settings
-from app.guardrails import apply_output_guardrails, check_input
+from app.guardrails import (
+    OFF_TOPIC_MESSAGE,
+    apply_output_guardrails,
+    check_input,
+    is_in_scope,
+)
 from app.llm import ToolCall, chat
 from app.observability import METRICS, get_logger
 from app.tools import get as get_tool
@@ -125,6 +130,12 @@ def run_agent(user_message: str, history: list[dict] | None = None) -> dict[str,
     guard = check_input(user_message)
     if not guard.allowed:
         return {"answer": guard.message, "trace": [{"kind": "guardrail", "action": "blocked"}]}
+
+    if settings.scope_guard and not is_in_scope(user_message):
+        return {
+            "answer": OFF_TOPIC_MESSAGE,
+            "trace": [{"kind": "guardrail", "action": "off_topic"}],
+        }
 
     messages: list[dict[str, Any]] = [{"role": "system", "content": SYSTEM_PROMPT}]
     if history:

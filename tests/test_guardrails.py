@@ -1,5 +1,6 @@
 """Tests for the Responsible-AI guardrails."""
-from app.guardrails import DISCLAIMER, apply_output_guardrails, check_input
+from app.guardrails import DISCLAIMER, apply_output_guardrails, check_input, is_in_scope
+from app.llm import LLMResponse
 
 
 def test_blocks_empty():
@@ -36,3 +37,28 @@ def test_output_no_duplicate_disclaimer():
 def test_advice_flag_softens_answer():
     out = apply_output_guardrails("Tesla is volatile.", flagged_advice=True)
     assert "can't give personalised" in out.lower()
+
+
+def test_scope_allows_finance_concept(monkeypatch):
+    import app.llm as llm
+
+    monkeypatch.setattr(llm, "chat", lambda *a, **k: LLMResponse(content="RELEVANT"))
+    assert is_in_scope("What is a P/E ratio?")
+
+
+def test_scope_rejects_off_topic(monkeypatch):
+    import app.llm as llm
+
+    monkeypatch.setattr(llm, "chat", lambda *a, **k: LLMResponse(content="UNRELATED"))
+    assert not is_in_scope("Write me a poem about cats")
+
+
+def test_scope_fails_open_on_error(monkeypatch):
+    import app.llm as llm
+
+    def boom(*a, **k):
+        raise RuntimeError("provider down")
+
+    monkeypatch.setattr(llm, "chat", boom)
+    # Never block a user because the classifier failed.
+    assert is_in_scope("anything")

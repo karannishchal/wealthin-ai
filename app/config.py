@@ -19,7 +19,7 @@ class Settings(BaseSettings):
 
     # models
     groq_model: str = "llama-3.3-70b-versatile"
-    gemini_model: str = "gemini-1.5-flash"
+    gemini_model: str = "gemini-2.5-flash"
     anthropic_model: str = "claude-haiku-4-5-20251001"
     openai_model: str = "gpt-4o-mini"
 
@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     demo_mode: bool = True
     rate_limit_per_minute: int = 15
     max_agent_steps: int = 6
+    scope_guard: bool = True  # politely redirect clearly off-topic questions
     docs_dir: str = "./data/docs"
     log_level: str = "INFO"
 

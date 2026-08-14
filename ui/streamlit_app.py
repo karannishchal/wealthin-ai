@@ -1,19 +1,78 @@
 """Streamlit chat UI for WealthIn.AI.
 
-Black / grey / orange theme. Talks to the FastAPI backend at API_URL and shows
-the agent's tool-use trace so viewers can see it reasoning, not just answering.
+Black / grey / orange theme. Runs in two modes:
+  * API mode (default): talks to the FastAPI backend at API_URL.
+  * In-process mode (INPROCESS=1): calls the agent directly, so the app can be
+    hosted as a single container (e.g. Hugging Face Spaces) with no backend.
 """
 from __future__ import annotations
 
 import os
+import sys
 
 import requests
 import streamlit as st
 
+# Make the `app` package importable when run from a hosted Streamlit runtime
+# (e.g. Streamlit Community Cloud) where the repo root isn't on sys.path by default.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# On Streamlit Community Cloud, config is provided via st.secrets. Mirror those
+# values into the environment so pydantic Settings and the agent pick them up
+# (e.g. GEMINI_API_KEY, INPROCESS). No-op locally when no secrets file exists.
+try:
+    for _k, _v in st.secrets.items():
+        os.environ.setdefault(_k, str(_v))
+except Exception:  # noqa: BLE001 - no secrets configured is fine
+    pass
+
 API_URL = os.environ.get("API_URL", "http://localhost:8000")
-ORANGE = "#E8834A"
+INPROCESS = os.environ.get("INPROCESS", "0") == "1"
 
 st.set_page_config(page_title="WealthIn.AI", page_icon="📈", layout="centered")
+
+
+# --------------------------------------------------------------------------- #
+#  Answer source: in-process agent or remote FastAPI backend
+# --------------------------------------------------------------------------- #
+def get_status() -> tuple[str, str]:
+    """Return (badge_text, css_class)."""
+    if INPROCESS:
+        from app.config import settings
+
+        if settings.has_any_key():
+            return "🟢 Backend Online · Provider: Google Gemini", "wi-badge"
+        return "🟠 Demo mode · no LLM key set", "wi-badge wi-badge-off"
+    try:
+        h = requests.get(f"{API_URL}/health", timeout=5).json()
+        if h.get("has_key"):
+            return "🟢 Backend Online · Provider: Google Gemini", "wi-badge"
+        return "🟠 Demo mode · no LLM key set", "wi-badge wi-badge-off"
+    except Exception:  # noqa: BLE001
+        return "🔴 Backend not reachable", "wi-badge wi-badge-off"
+
+
+def get_answer(prompt: str, history: list[dict]) -> dict:
+    if INPROCESS:
+        from app.config import settings
+
+        if not settings.has_any_key():
+            from app.demo import demo_answer
+
+            return demo_answer(prompt)
+        from app.agent import run_agent
+
+        result = run_agent(prompt, history=history)
+        return {"answer": result.get("answer", ""), "trace": result.get("trace", [])}
+    try:
+        return requests.post(
+            f"{API_URL}/chat",
+            json={"message": prompt, "history": history},
+            timeout=120,
+        ).json()
+    except Exception as exc:  # noqa: BLE001
+        return {"answer": f"Request failed: {exc}", "trace": []}
+
 
 st.markdown(
     """
@@ -21,7 +80,6 @@ st.markdown(
       #MainMenu, footer {visibility: hidden;}
       .stApp {background: #0F0F10;}
       .block-container {padding-top: 2.2rem; max-width: 820px;}
-      /* header */
       .wi-head {display:flex; align-items:center; justify-content:center; gap:10px; margin-top:4px;}
       .wi-logo {width:30px; height:30px; border-radius:8px; background:#E8834A;
                 display:inline-flex; align-items:center; justify-content:center;
@@ -32,20 +90,16 @@ st.markdown(
                font-size:0.8rem; letter-spacing:0.4px; margin:6px 0 2px;}
       .wi-divider {height:1px; background:#242426; margin:14px 0 6px;}
       .wi-cap {text-align:center; color:#8A8A8E; font-size:0.85rem; margin-bottom:2px;}
-      /* sidebar */
       section[data-testid="stSidebar"] {background:#141415; border-right:1px solid #242426;}
       section[data-testid="stSidebar"] .stButton>button {
         width:100%; text-align:left; background:#1D1D1F; color:#D6D6D8;
         border:1px solid #2C2C2F; border-radius:9px; font-size:0.82rem; padding:8px 10px;}
-      section[data-testid="stSidebar"] .stButton>button:hover {
-        border-color:#E8834A; color:#F0A173;}
+      section[data-testid="stSidebar"] .stButton>button:hover {border-color:#E8834A; color:#F0A173;}
       .wi-badge {background:#17211A; border:1px solid #2C4A37; color:#7FC79B;
                  font-family:ui-monospace,monospace; font-size:0.72rem;
                  padding:8px 10px; border-radius:9px; margin-top:10px;}
       .wi-badge-off {background:#231A17; border-color:#4A342C; color:#E8A173;}
-      /* chat input accent */
       [data-testid="stChatInput"] {background:#1A1A1C; border:1px solid #2C2C2F; border-radius:12px;}
-      /* tool-trace chips */
       .wi-chip {display:inline-block; font-family:ui-monospace,monospace; font-size:0.72rem;
                 color:#F0A173; background:rgba(232,131,74,0.14);
                 border:1px solid rgba(232,131,74,0.30); border-radius:6px;
@@ -71,7 +125,7 @@ st.markdown(
 
 EXAMPLES = [
     "Compare Nvidia and AMD over the last 6 months and flag risks",
-    "What's Apple's P/E and recent performance?",
+    "What's Apple's recent performance?",
     "Analyse a portfolio: 60% AAPL, 30% MSFT, 10% VOO",
     "Any recent news on the semiconductor sector?",
 ]
@@ -86,19 +140,8 @@ with st.sidebar:
     for ex in EXAMPLES:
         if st.button(ex, key="ex_" + ex[:24]):
             st.session_state.pending = ex
-    try:
-        h = requests.get(f"{API_URL}/health", timeout=5).json()
-        online = "🟢 Backend Online · Provider: Google Gemini"
-        cls = "wi-badge"
-        if not h.get("has_key"):
-            online = "🟠 Demo mode · no LLM key set"
-            cls = "wi-badge wi-badge-off"
-        st.markdown(f'<div class="{cls}">{online}</div>', unsafe_allow_html=True)
-    except Exception:  # noqa: BLE001
-        st.markdown(
-            '<div class="wi-badge wi-badge-off">🔴 Backend not reachable</div>',
-            unsafe_allow_html=True,
-        )
+    badge, cls = get_status()
+    st.markdown(f'<div class="{cls}">{badge}</div>', unsafe_allow_html=True)
 
 for m in st.session_state.messages:
     avatar = "🧑" if m["role"] == "user" else "📈"
@@ -116,14 +159,7 @@ if prompt:
 
     with st.chat_message("assistant", avatar="📈"):
         with st.spinner("Researching…"):
-            try:
-                resp = requests.post(
-                    f"{API_URL}/chat",
-                    json={"message": prompt, "history": st.session_state.messages[:-1][-8:]},
-                    timeout=120,
-                ).json()
-            except Exception as exc:  # noqa: BLE001
-                resp = {"answer": f"Request failed: {exc}", "trace": []}
+            resp = get_answer(prompt, st.session_state.messages[:-1][-8:])
 
         st.markdown(resp.get("answer", ""))
         trace = resp.get("trace") or []
