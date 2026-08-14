@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     openai_api_key: str = ""
 
+    # market-data key (optional but recommended for reliable prices from the cloud)
+    twelvedata_api_key: str = ""
+
     # models
     groq_model: str = "llama-3.3-70b-versatile"
     gemini_model: str = "gemini-2.5-flash"

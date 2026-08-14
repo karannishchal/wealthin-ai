@@ -30,6 +30,40 @@ def _stats(close, ticker: str, period: str, source: str) -> dict[str, Any]:
     }
 
 
+def _from_twelvedata(ticker: str, period: str) -> dict[str, Any] | None:
+    """Twelve Data — free API key, reliable from cloud hosts. Primary source."""
+    from app.config import settings
+
+    key = settings.twelvedata_api_key
+    if not key:
+        return None
+    try:
+        import pandas as pd
+        import requests
+
+        n = _PERIOD_DAYS.get(period, 66)
+        r = requests.get(
+            "https://api.twelvedata.com/time_series",
+            params={"symbol": ticker.upper(), "interval": "1day", "outputsize": n, "apikey": key},
+            timeout=12,
+        )
+        r.raise_for_status()
+        data = r.json()
+        values = data.get("values")
+        if not values:  # error payload or empty
+            return None
+        # Twelve Data returns most-recent first; reverse to oldest→newest.
+        rows = list(reversed(values))
+        close = pd.Series([float(v["close"]) for v in rows])
+        out = _stats(close, ticker, period, "twelvedata")
+        out["period_high"] = round(max(float(v["high"]) for v in rows), 2)
+        out["period_low"] = round(min(float(v["low"]) for v in rows), 2)
+        out["currency"] = (data.get("meta") or {}).get("currency", "USD")
+        return out
+    except Exception:  # noqa: BLE001 - fall through to the next source
+        return None
+
+
 def _from_yfinance(ticker: str, period: str) -> dict[str, Any] | None:
     """Yahoo Finance — great locally, but often blocked from cloud IPs."""
     try:
@@ -82,10 +116,11 @@ def _from_stooq(ticker: str, period: str) -> dict[str, Any] | None:
 def _market_data(ticker: str, period: str = "3mo") -> dict[str, Any]:
     """Return recent price action and key stats for a ticker.
 
-    Tries Yahoo Finance first, then falls back to Stooq (works from the cloud).
+    Order: Twelve Data (reliable, keyed) → Yahoo Finance → Stooq → graceful error.
     """
     return (
-        _from_yfinance(ticker, period)
+        _from_twelvedata(ticker, period)
+        or _from_yfinance(ticker, period)
         or _from_stooq(ticker, period)
         or {"error": f"Live market data for '{ticker}' is temporarily unavailable."}
     )
